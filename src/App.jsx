@@ -1,46 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import './index.css'
 
-const API_KEY = import.meta.env.VITE_GNEWS_API_KEY
+const API_KEY = import.meta.env.VITE_GUARDIAN_API_KEY
 const CATEGORIES = ['General', 'Technology', 'Business', 'Science', 'Health', 'Entertainment']
 const PAGE_SIZE = 9
 
-const FALLBACK_IMAGES = {
-  General: [
-    'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&q=80',
-    'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80',
-    'https://images.unsplash.com/photo-1495020689067-958852a7765e?w=800&q=80',
-  ],
-  Technology: [
-    'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80',
-    'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&q=80',
-    'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800&q=80',
-  ],
-  Business: [
-    'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=800&q=80',
-    'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800&q=80',
-    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80',
-  ],
-  Science: [
-    'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=800&q=80',
-    'https://images.unsplash.com/photo-1564325724739-bae0bd08762c?w=800&q=80',
-    'https://images.unsplash.com/photo-1507413245164-6160d8298b31?w=800&q=80',
-  ],
-  Health: [
-    'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=800&q=80',
-    'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=800&q=80',
-    'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&q=80',
-  ],
-  Entertainment: [
-    'https://images.unsplash.com/photo-1603190287605-e6ade32fa852?w=800&q=80',
-    'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=800&q=80',
-    'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&q=80',
-  ],
-}
-
-function getFallback(category, index) {
-  const images = FALLBACK_IMAGES[category] || FALLBACK_IMAGES.General
-  return images[index % images.length]
+const SECTION_MAP = {
+  General: 'news',
+  Technology: 'technology',
+  Business: 'business',
+  Science: 'science',
+  Health: 'society',
+  Entertainment: 'culture',
 }
 
 function SkeletonCard() {
@@ -57,38 +28,44 @@ function SkeletonCard() {
   )
 }
 
-function ArticleCard({ article, index, category }) {
+function ArticleCard({ article, index }) {
   const [imgError, setImgError] = useState(false)
-  const domain = article.url ? new URL(article.url).hostname.replace('www.', '') : ''
-  const date = article.publishedAt
-    ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(article.publishedAt))
+  const date = article.webPublicationDate
+    ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(article.webPublicationDate))
     : ''
-  const image = (!article.image || imgError) ? getFallback(category, index) : article.image
+  const image = article.fields?.thumbnail
+  const source = 'The Guardian'
 
   return (
     <a
       className={`card ${index === 0 ? 'card--featured' : ''}`}
-      href={article.url}
+      href={article.webUrl}
       target="_blank"
       rel="noopener noreferrer"
       style={{ animationDelay: `${index * 60}ms` }}
     >
-      <div className="card-img-wrap">
-        <img
-          className="card-img"
-          src={image}
-          alt={article.title}
-          onError={() => setImgError(true)}
-        />
-      </div>
+      {(image && !imgError) ? (
+        <div className="card-img-wrap">
+          <img
+            className="card-img"
+            src={image}
+            alt={article.webTitle}
+            onError={() => setImgError(true)}
+          />
+        </div>
+      ) : (
+        <div className="card-img-wrap card-img-wrap--empty">
+          <span className="card-img-placeholder">PULSE</span>
+        </div>
+      )}
       <div className="card-body">
         <div className="card-meta">
-          <span className="card-source">{article.source?.name || domain}</span>
+          <span className="card-source">{source}</span>
           <span className="card-date">{date}</span>
         </div>
-        <h2 className="card-title">{article.title?.replace(/\s*-\s*[^-]+$/, '')}</h2>
-        {index === 0 && article.description && (
-          <p className="card-desc">{article.description}</p>
+        <h2 className="card-title">{article.webTitle}</h2>
+        {index === 0 && article.fields?.trailText && (
+          <p className="card-desc" dangerouslySetInnerHTML={{ __html: article.fields.trailText }} />
         )}
         <span className="card-read">Read</span>
       </div>
@@ -110,7 +87,8 @@ function App() {
     const controller = new AbortController()
     abortRef.current = controller
 
-    const url = `https://gnews.io/api/v4/top-headlines?category=${category.toLowerCase()}&lang=en&max=${PAGE_SIZE}&page=${page}&apikey=${API_KEY}`
+    const section = SECTION_MAP[category]
+    const url = `https://content.guardianapis.com/search?section=${section}&page=${page}&page-size=${PAGE_SIZE}&show-fields=thumbnail,trailText&api-key=${API_KEY}`
 
     async function fetchNews() {
       setLoading(true)
@@ -119,9 +97,9 @@ function App() {
         const res = await fetch(url, { signal: controller.signal })
         if (!res.ok) throw new Error(`Error ${res.status}`)
         const data = await res.json()
-        if (data.status === 'error') throw new Error(data.message)
-        setArticles(data.articles || [])
-        setTotalResults(data.totalArticles || 0)
+        if (data.response.status === 'error') throw new Error('API error')
+        setArticles(data.response.results || [])
+        setTotalResults(data.response.total || 0)
       } catch (err) {
         if (err.name === 'AbortError') return
         setError(err.message)
@@ -134,7 +112,7 @@ function App() {
     return () => controller.abort()
   }, [category, page])
 
-  const totalPages = Math.ceil(Math.min(totalResults, 100) / PAGE_SIZE)
+  const totalPages = Math.ceil(Math.min(totalResults, 200) / PAGE_SIZE)
 
   const handleCategory = (cat) => {
     setCategory(cat)
@@ -187,7 +165,7 @@ function App() {
               {loading
                 ? Array.from({ length: PAGE_SIZE }).map((_, i) => <SkeletonCard key={i} />)
                 : articles.map((article, i) => (
-                    <ArticleCard key={article.url + i} article={article} index={i} category={category} />
+                    <ArticleCard key={article.id} article={article} index={i} />
                   ))
               }
             </div>
