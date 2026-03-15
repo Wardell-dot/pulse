@@ -491,7 +491,6 @@ body {
   .header-nav-inner {
     padding: 0 1.25rem;
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
   }
 
   .nav-btn {
